@@ -1,0 +1,14 @@
+{
+  "timestamp": "2025-10-31 22:55:26",
+  "filename": "train_0.jpg",
+  "model": "best.pt",
+  "mode": "image",
+  "stats": {
+    "0": 137,
+    "empty_slot": 6
+  },
+  "total": 143,
+  "confidence": 0.25,
+  "iou": 0.45,
+  "result_image": "http://localhost:8000/history/image/20251031_225526_train_0_result.jpg"
+}

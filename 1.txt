@@ -1,0 +1,14 @@
+     cd E:\bysj\ultralytics-8.2.27\project
+     uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+     cd E:\bysj\ultralytics-8.2.27\project\frontend
+     npm run dev   
+
+     cd E:\bysj\ultralytics-8.2.27\project
+     python app.py
+
+     deactivate
+
+     conda deactivate
+
+     conda activate yolo

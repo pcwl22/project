@@ -1,0 +1,14 @@
+{
+  "timestamp": "2025-11-25 13:08:33",
+  "filename": "val_3.jpg",
+  "model": "best.pt",
+  "mode": "image",
+  "stats": {
+    "0": 112,
+    "empty_slot": 4
+  },
+  "total": 116,
+  "confidence": 0.25,
+  "iou": 0.45,
+  "result_image": "http://localhost:8000/history/image/20251125_130833_val_3_result.jpg"
+}
