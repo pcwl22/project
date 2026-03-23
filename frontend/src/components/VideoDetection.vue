@@ -1,10 +1,10 @@
 <template>
-  <div class="upload-container">
+  <div class="upload-container glass-card">
     <el-select 
       v-model="selectedModel" 
       placeholder="选择模型权重"
       size="large"
-      style="width: 200px;"
+      class="custom-select"
     >
       <el-option
         v-for="model in modelList"
@@ -23,7 +23,10 @@
       accept="video/*"
     >
       <template #trigger>
-        <el-button type="primary">选择视频</el-button>
+        <el-button type="primary" class="action-button">
+          <el-icon><VideoCamera /></el-icon>
+          选择视频
+        </el-button>
       </template>
     </el-upload>
     
@@ -32,23 +35,25 @@
       @click="uploadVideo"
       :disabled="!videoFile"
       :loading="videoLoading"
+      class="action-button"
     >
+      <el-icon><CaretRight /></el-icon>
       开始检测
     </el-button>
   </div>
   
   <!-- 置信度和 IOU 阈值设置 -->
   <div class="threshold-container">
-    <el-card class="threshold-card">
+    <div class="threshold-card glass-card">
       <div class="threshold-item">
         <div class="threshold-label">
           <span>
             置信度阈值
             <el-tooltip content="控制检测结果的最低置信度，值越高，过滤越严格，误检越少" placement="top">
-              <el-icon style="margin-left: 5px; cursor: help;"><QuestionFilled /></el-icon>
+              <el-icon class="help-icon"><QuestionFilled /></el-icon>
             </el-tooltip>
           </span>
-          <el-tag size="small">{{ confidence }}</el-tag>
+          <el-tag size="small" effect="dark" round>{{ confidence }}</el-tag>
         </div>
         <el-slider 
           v-model="confidence" 
@@ -56,6 +61,7 @@
           :max="1" 
           :step="0.05"
           show-stops
+          class="custom-slider"
         />
       </div>
       <div class="threshold-item">
@@ -63,10 +69,10 @@
           <span>
             IOU 阈值
             <el-tooltip content="非极大值抑制阈值，控制重叠框的过滤，值越小，过滤越严格" placement="top">
-              <el-icon style="margin-left: 5px; cursor: help;"><QuestionFilled /></el-icon>
+              <el-icon class="help-icon"><QuestionFilled /></el-icon>
             </el-tooltip>
           </span>
-          <el-tag size="small">{{ iouThreshold }}</el-tag>
+          <el-tag size="small" effect="dark" round>{{ iouThreshold }}</el-tag>
         </div>
         <el-slider 
           v-model="iouThreshold" 
@@ -74,19 +80,47 @@
           :max="1" 
           :step="0.05"
           show-stops
+          class="custom-slider"
         />
       </div>
-    </el-card>
+    </div>
   </div>
 
   <div class="preview-container" v-if="videoUrl || resultVideoUrl">
-    <div class="video-wrapper">
-      <h3>原始视频</h3>
-      <video :src="videoUrl" controls v-if="videoUrl"></video>
+    <div class="video-wrapper glass-card">
+      <div class="video-header">
+        <h3>原始视频</h3>
+      </div>
+      <div class="video-content">
+        <video 
+          :src="videoUrl" 
+          controls 
+          v-if="videoUrl"
+          @error="handleVideoError('original')"
+          @loadeddata="handleVideoLoaded('original')"
+        ></video>
+      </div>
     </div>
-    <div class="video-wrapper" v-if="resultVideoUrl">
-      <h3>检测结果</h3>
-      <video :src="resultVideoUrl" controls></video>
+    <div class="video-wrapper glass-card" v-if="resultVideoUrl">
+      <div class="video-header">
+        <h3>检测结果</h3>
+        <el-button 
+          size="small" 
+          type="primary" 
+          @click="downloadVideo"
+          :icon="Download"
+        >
+          下载视频
+        </el-button>
+      </div>
+      <div class="video-content">
+        <video 
+          :src="resultVideoUrl" 
+          controls
+          @error="handleVideoError('result')"
+          @loadeddata="handleVideoLoaded('result')"
+        ></video>
+      </div>
     </div>
   </div>
 </template>
@@ -96,7 +130,7 @@ import { ref } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
-import { QuestionFilled } from '@element-plus/icons-vue'
+import { QuestionFilled, VideoCamera, CaretRight, Download } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   modelList: string[]
@@ -121,26 +155,81 @@ const handleVideoChange = (file: UploadFile) => {
   resultVideoUrl.value = ''
 }
 
+const handleVideoError = (type: string) => {
+  console.error(`Video error (${type}):`, event)
+  ElMessage.error(`${type === 'original' ? '原始' : '结果'}视频加载失败`)
+}
+
+const handleVideoLoaded = (type: string) => {
+  console.log(`Video loaded (${type})`)
+}
+
+const downloadVideo = () => {
+  if (!resultVideoUrl.value) return
+  
+  const link = document.createElement('a')
+  link.href = resultVideoUrl.value
+  link.download = `detected_${Date.now()}.mp4`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
 const uploadVideo = async () => {
   if (!videoFile.value) return
 
   videoLoading.value = true
   const formData = new FormData()
   formData.append('file', videoFile.value)
-  formData.append('mode', 'video')
 
   try {
-    const response = await axios.post('/api/detect', formData, {
-      responseType: 'blob'
-    })
+    const response = await axios.post(
+      `/api/detect?mode=video&conf=${confidence.value}&iou=${iouThreshold.value}&model=${selectedModel.value}`,
+      formData,
+      {
+        responseType: 'blob',
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        timeout: 300000  // 5分钟超时
+      }
+    )
 
+    console.log('Response received:', response)
+    console.log('Response type:', response.headers['content-type'])
+    console.log('Response size:', response.data.size)
+
+    // 检查响应是否为视频
+    if (!response.data || response.data.size === 0) {
+      throw new Error('接收到空的视频文件')
+    }
+
+    // 创建 Blob URL
     const videoBlob = new Blob([response.data], { type: 'video/mp4' })
-    resultVideoUrl.value = URL.createObjectURL(videoBlob)
+    const blobUrl = URL.createObjectURL(videoBlob)
+    
+    console.log('Blob URL created:', blobUrl)
+    console.log('Blob size:', videoBlob.size)
+    console.log('Blob type:', videoBlob.type)
+    
+    // 释放旧的 URL
+    if (resultVideoUrl.value) {
+      URL.revokeObjectURL(resultVideoUrl.value)
+    }
+    
+    resultVideoUrl.value = blobUrl
 
+    ElMessage.success('视频检测完成')
     emit('detection-complete')
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error uploading video:', error)
-    ElMessage.error('视频检测失败')
+    if (error.code === 'ECONNABORTED') {
+      ElMessage.error('视频处理超时，请尝试较短的视频')
+    } else if (error.response) {
+      ElMessage.error(`视频检测失败: ${error.response.status}`)
+    } else {
+      ElMessage.error('视频检测失败')
+    }
   } finally {
     videoLoading.value = false
   }
@@ -152,139 +241,36 @@ const uploadVideo = async () => {
   display: flex;
   gap: 20px;
   justify-content: center;
+  align-items: center;
+  padding: 40px;
   margin-bottom: 30px;
-  padding: 30px;
-  background: linear-gradient(135deg, #f8f9ff 0%, #faf5ff 100%);
-  border-radius: 12px;
-  border: 2px dashed #667eea;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
+  border: 1px dashed var(--primary-color);
+  background: rgba(255, 255, 255, 0.5);
 }
 
-.upload-container::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(45deg, transparent, rgba(102, 126, 234, 0.1), transparent);
-  transform: rotate(45deg);
-  transition: all 0.6s;
+.custom-select {
+  width: 200px;
 }
 
-.upload-container:hover::before {
-  left: 100%;
-}
-
-.upload-container:hover {
-  border-color: #764ba2;
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
-  transform: translateY(-2px);
-}
-
-.preview-container {
-  display: flex;
-  gap: 30px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 30px;
-}
-
-.video-wrapper {
-  flex: 1;
-  min-width: 300px;
-  max-width: 600px;
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  animation: fadeIn 0.6s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.video-wrapper:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 30px rgba(102, 126, 234, 0.2);
-}
-
-.video-wrapper h3 {
-  margin: 0 0 15px 0;
-  color: #2c3e50;
-  font-size: 18px;
+.action-button {
+  height: 40px;
+  padding: 0 24px;
   font-weight: 600;
-  position: relative;
-  padding-bottom: 5px;
-  border-bottom: 2px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.video-wrapper h3::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  width: 40px;
-  height: 3px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-
-.video-wrapper:hover h3::after {
-  width: 80px;
-}
-
-.video-wrapper video {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-}
-
-/* Threshold styles */
 .threshold-container {
-  margin: 20px 0;
+  margin-bottom: 30px;
 }
 
 .threshold-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  border: none;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  animation: slideInLeft 0.6s ease-out;
-}
-
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.threshold-card:hover {
-  box-shadow: 0 8px 30px rgba(102, 126, 234, 0.15);
-  transform: translateY(-2px);
+  padding: 24px;
 }
 
 .threshold-item {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .threshold-item:last-child {
@@ -295,12 +281,72 @@ const uploadVideo = async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .threshold-label span {
-  font-size: 14px;
-  font-weight: 500;
-  color: #2c3e50;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.help-icon {
+  color: var(--text-secondary);
+  cursor: help;
+  transition: color 0.3s;
+}
+
+.help-icon:hover {
+  color: var(--primary-color);
+}
+
+.preview-container {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 30px;
+}
+
+.video-wrapper {
+  flex: 1;
+  min-width: 400px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.video-header {
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  padding-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.video-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.video-content {
+  flex: 1;
+  background: black;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+.video-wrapper video {
+  max-width: 100%;
+  max-height: 100%;
 }
 </style>

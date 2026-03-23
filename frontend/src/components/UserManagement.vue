@@ -51,7 +51,7 @@ const loadUsers = async () => {
   if (!props.isAdmin) return
   
   try {
-    const response = await axios.get('http://localhost:8000/admin/users', {
+    const response = await axios.get('/api/admin/users', {
       params: { is_admin: true }
     })
     userList.value = response.data
@@ -63,7 +63,7 @@ const loadUsers = async () => {
 
 const deleteUser = async (userId: number) => {
   try {
-    await axios.delete(`http://localhost:8000/admin/users/${userId}`, {
+    await axios.delete(`/api/admin/users/${userId}`, {
       params: { is_admin: true }
     })
     ElMessage.success('用户已删除')

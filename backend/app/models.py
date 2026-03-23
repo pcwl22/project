@@ -10,6 +10,9 @@ class User(Base):
 	id = Column(Integer, primary_key=True, index=True)
 	username = Column(String(64), unique=True, nullable=False, index=True)
 	password = Column(String(255), nullable=False)
+	email = Column(String(255), nullable=True)  # 邮箱（可选）
+	security_question = Column(String(255), nullable=True)  # 安全问题
+	security_answer = Column(String(255), nullable=True)  # 安全答案
 	created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 

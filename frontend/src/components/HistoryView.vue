@@ -136,12 +136,12 @@ const fetchHistory = async () => {
     const response = await axios.get('http://localhost:8000/detections/', {
       params: {
         limit: pageSize.value,
-        offset: (currentPage.value - 1) * pageSize.value,
+        skip: (currentPage.value - 1) * pageSize.value,
         user_id: userId ? parseInt(userId) : undefined,
         is_admin: isAdmin
       }
     })
-    historyList.value = response.data.items || []
+    historyList.value = response.data.records || []
     total.value = response.data.total || 0
   } catch (error) {
     console.error('Error fetching history:', error)

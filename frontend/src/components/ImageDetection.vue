@@ -1,10 +1,10 @@
 <template>
-  <div class="upload-container">
+  <div class="upload-container glass-card">
     <el-select 
       v-model="selectedModel" 
       placeholder="选择模型权重"
       size="large"
-      style="width: 200px;"
+      class="custom-select"
     >
       <el-option
         v-for="model in modelList"
@@ -23,7 +23,10 @@
       accept="image/*"
     >
       <template #trigger>
-        <el-button type="primary">选择图片</el-button>
+        <el-button type="primary" class="action-button">
+          <el-icon><Picture /></el-icon>
+          选择图片
+        </el-button>
       </template>
     </el-upload>
     
@@ -32,23 +35,25 @@
       @click="uploadImage"
       :disabled="!imageFile"
       :loading="imageLoading"
+      class="action-button"
     >
+      <el-icon><CaretRight /></el-icon>
       开始检测
     </el-button>
   </div>
   
   <!-- 置信度和 IOU 阈值设置 -->
   <div class="threshold-container">
-    <el-card class="threshold-card">
+    <div class="threshold-card glass-card">
       <div class="threshold-item">
         <div class="threshold-label">
           <span>
             置信度阈值
             <el-tooltip content="控制检测结果的最低置信度，值越高，过滤越严格，误检越少" placement="top">
-              <el-icon style="margin-left: 5px; cursor: help;"><QuestionFilled /></el-icon>
+              <el-icon class="help-icon"><QuestionFilled /></el-icon>
             </el-tooltip>
           </span>
-          <el-tag size="small">{{ confidence }}</el-tag>
+          <el-tag size="small" effect="dark" round>{{ confidence }}</el-tag>
         </div>
         <el-slider 
           v-model="confidence" 
@@ -56,6 +61,7 @@
           :max="1" 
           :step="0.05"
           show-stops
+          class="custom-slider"
         />
       </div>
       <div class="threshold-item">
@@ -63,10 +69,10 @@
           <span>
             IOU 阈值
             <el-tooltip content="非极大值抑制阈值，控制重叠框的过滤，值越小，过滤越严格" placement="top">
-              <el-icon style="margin-left: 5px; cursor: help;"><QuestionFilled /></el-icon>
+              <el-icon class="help-icon"><QuestionFilled /></el-icon>
             </el-tooltip>
           </span>
-          <el-tag size="small">{{ iouThreshold }}</el-tag>
+          <el-tag size="small" effect="dark" round>{{ iouThreshold }}</el-tag>
         </div>
         <el-slider 
           v-model="iouThreshold" 
@@ -74,32 +80,40 @@
           :max="1" 
           :step="0.05"
           show-stops
+          class="custom-slider"
         />
       </div>
-    </el-card>
+    </div>
   </div>
 
   <!-- 检测进度条 -->
-  <div v-if="imageLoading" class="progress-container">
+  <div v-if="imageLoading" class="progress-container glass-card">
     <el-progress 
       :percentage="detectProgress" 
       :format="formatProgress"
+      :stroke-width="12"
+      striped
+      striped-flow
       :duration="5"
     />
-    <p class="progress-text">正在检测中...</p>
+    <p class="progress-text">正在分析图像...</p>
   </div>
 
   <!-- 检测统计信息 -->
   <div v-if="detections.length" class="stats-container">
-    <h3>检测统计</h3>
-    <el-card>
-      <template #header>
-        <div class="stats-header">
-          <span>总数量: {{ getTotalDetections() }}</span>
-          <el-button type="primary" link @click="exportStats">导出统计</el-button>
+    <h3 class="section-title">检测统计</h3>
+    <div class="stats-card glass-card">
+      <div class="stats-header">
+        <div class="total-count">
+          <span class="label">总数量</span>
+          <span class="value">{{ getTotalDetections() }}</span>
         </div>
-      </template>
-      <el-table :data="statsTableData" stripe>
+        <el-button type="primary" plain round @click="exportStats">
+          <el-icon><Download /></el-icon>
+          导出统计
+        </el-button>
+      </div>
+      <el-table :data="statsTableData" stripe class="custom-table">
         <el-table-column prop="name" label="品种" />
         <el-table-column prop="count" label="数量" />
         <el-table-column prop="percentage" label="占比">
@@ -108,18 +122,20 @@
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+    </div>
   </div>
 
   <div class="preview-container" v-if="imageUrl">
-    <div class="image-wrapper">
+    <div class="image-wrapper glass-card">
       <div class="image-header">
         <h3>原始图片</h3>
-        <el-button-group>
-          <el-button size="small" @click="zoomIn('original')" icon="ZoomIn"></el-button>
-          <el-button size="small" @click="zoomOut('original')" icon="ZoomOut"></el-button>
-          <el-button size="small" @click="resetZoom('original')" icon="RefreshRight"></el-button>
-        </el-button-group>
+        <div class="toolbar">
+          <el-button-group>
+            <el-button size="small" @click="zoomIn('original')" icon="ZoomIn" circle></el-button>
+            <el-button size="small" @click="zoomOut('original')" icon="ZoomOut" circle></el-button>
+            <el-button size="small" @click="resetZoom('original')" icon="RefreshRight" circle></el-button>
+          </el-button-group>
+        </div>
       </div>
       <div 
         class="image-zoom-container" 
@@ -145,15 +161,17 @@
         </div>
       </div>
     </div>
-    <div class="image-wrapper" v-if="detections.length">
+    <div class="image-wrapper glass-card" v-if="detections.length">
       <div class="image-header">
         <h3>检测结果</h3>
-        <el-button-group>
-          <el-button size="small" @click="zoomIn('result')" icon="ZoomIn"></el-button>
-          <el-button size="small" @click="zoomOut('result')" icon="ZoomOut"></el-button>
-          <el-button size="small" @click="resetZoom('result')" icon="RefreshRight"></el-button>
-          <el-button size="small" @click="downloadResult" icon="Download">下载</el-button>
-        </el-button-group>
+        <div class="toolbar">
+          <el-button-group>
+            <el-button size="small" @click="zoomIn('result')" icon="ZoomIn" circle></el-button>
+            <el-button size="small" @click="zoomOut('result')" icon="ZoomOut" circle></el-button>
+            <el-button size="small" @click="resetZoom('result')" icon="RefreshRight" circle></el-button>
+          </el-button-group>
+          <el-button size="small" type="primary" @click="downloadResult" icon="Download" round class="ml-2">下载</el-button>
+        </div>
       </div>
       <div 
         class="image-zoom-container" 
@@ -183,7 +201,7 @@ import { ref, computed } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
-import { QuestionFilled, ZoomIn, ZoomOut, RefreshRight, Download } from '@element-plus/icons-vue'
+import { QuestionFilled, ZoomIn, ZoomOut, RefreshRight, Download, Picture, CaretRight } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   modelList: string[]
@@ -279,10 +297,9 @@ const uploadImage = async () => {
   detectProgress.value = 0
   const formData = new FormData()
   formData.append('file', imageFile.value)
-  formData.append('mode', 'image')
-  if (props.currentUserId) {
-    formData.append('user_id', props.currentUserId.toString())
-  }
+  
+  // 获取当前登录用户ID
+  const userId = localStorage.getItem('userId') || '0'
 
   let progressTimer: number | undefined
   
@@ -294,7 +311,7 @@ const uploadImage = async () => {
     }, 200)
 
     const response = await axios.post(
-      `http://localhost:8000/detect?model=${selectedModel.value}&conf=${confidence.value}&iou=${iouThreshold.value}`, 
+      `/api/detect?model=${selectedModel.value}&conf=${confidence.value}&iou=${iouThreshold.value}&mode=image&user_id=${userId}`, 
       formData
     )
     
@@ -356,8 +373,8 @@ const drawDetections = () => {
 
   detections.value.forEach((det: Detection) => {
     const isEmpty = det.class_name.toLowerCase().includes('empty')
-    ctx.strokeStyle = isEmpty ? '#ff0000' : '#00ff00'
-    ctx.lineWidth = 2
+    ctx.strokeStyle = isEmpty ? '#ef4444' : '#22c55e'
+    ctx.lineWidth = 3
 
     const x = Math.round(det.x1)
     const y = Math.round(det.y1)
@@ -366,15 +383,15 @@ const drawDetections = () => {
     ctx.strokeRect(x, y, width, height)
 
     const label = `${det.class_name} ${det.confidence.toFixed(2)}`
-    ctx.font = '16px Arial'
+    ctx.font = 'bold 16px Inter'
     const textMetrics = ctx.measureText(label)
     const textWidth = textMetrics.width
-    const textHeight = 20
-    ctx.fillStyle = isEmpty ? '#ff0000' : '#00ff00'
-    ctx.fillRect(x, y - textHeight, textWidth + 6, textHeight)
+    const textHeight = 24
+    ctx.fillStyle = isEmpty ? '#ef4444' : '#22c55e'
+    ctx.fillRect(x, y - textHeight, textWidth + 10, textHeight)
     
     ctx.fillStyle = '#ffffff'
-    ctx.fillText(label, x + 3, y - 4)
+    ctx.fillText(label, x + 5, y - 6)
   })
 }
 
@@ -453,244 +470,36 @@ const downloadResult = () => {
   display: flex;
   gap: 20px;
   justify-content: center;
+  align-items: center;
+  padding: 40px;
   margin-bottom: 30px;
-  padding: 30px;
-  background: linear-gradient(135deg, #f8f9ff 0%, #faf5ff 100%);
-  border-radius: 12px;
-  border: 2px dashed #667eea;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
+  border: 1px dashed var(--primary-color);
+  background: rgba(255, 255, 255, 0.5);
 }
 
-.upload-container::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(45deg, transparent, rgba(102, 126, 234, 0.1), transparent);
-  transform: rotate(45deg);
-  transition: all 0.6s;
+.custom-select {
+  width: 200px;
 }
 
-.upload-container:hover::before {
-  left: 100%;
-}
-
-.upload-container:hover {
-  border-color: #764ba2;
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
-  transform: translateY(-2px);
-}
-
-.preview-container {
-  display: flex;
-  gap: 30px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 30px;
-}
-
-.image-wrapper {
-  flex: 1;
-  min-width: 300px;
-  max-width: 600px;
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  animation: fadeIn 0.6s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.image-wrapper:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 30px rgba(102, 126, 234, 0.2);
-}
-
-.image-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-  padding-bottom: 10px;
-  border-bottom: 2px solid #f0f0f0;
-}
-
-.image-header h3 {
-  margin: 0;
-  color: #2c3e50;
-  font-size: 18px;
+.action-button {
+  height: 40px;
+  padding: 0 24px;
   font-weight: 600;
-  position: relative;
-  padding-bottom: 5px;
-}
-
-.image-header h3::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 40px;
-  height: 3px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-
-.image-wrapper:hover .image-header h3::after {
-  width: 80px;
-}
-
-.image-zoom-container {
-  overflow: hidden;
-  cursor: grab;
-  position: relative;
-  min-height: 300px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: #f8f9fa;
-  border-radius: 8px;
-  user-select: none;
+  gap: 8px;
 }
 
-.image-zoom-container:active {
-  cursor: grabbing;
-}
-
-.image-wrapper img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-}
-
-.canvas-container {
-  position: relative;
-  display: inline-block;
-  transform-origin: center center;
-}
-
-.canvas-container img {
-  max-width: 100%;
-  height: auto;
-  display: block;
-  border-radius: 8px;
-}
-
-.detection-canvas {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.progress-container {
-  margin: 30px auto;
-  max-width: 600px;
-  text-align: center;
-  padding: 30px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  }
-  50% {
-    box-shadow: 0 4px 30px rgba(102, 126, 234, 0.2);
-  }
-}
-
-.progress-text {
-  margin-top: 15px;
-  color: #666;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.stats-container {
-  margin: 30px auto;
-  max-width: 900px;
-  animation: slideInUp 0.6s ease-out;
-}
-
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.stats-container h3 {
-  margin-bottom: 20px;
-  color: #2c3e50;
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.stats-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 5px;
-}
-
-/* Threshold styles */
 .threshold-container {
-  margin: 20px 0;
+  margin-bottom: 30px;
 }
 
 .threshold-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  border: none;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  animation: slideInLeft 0.6s ease-out;
-}
-
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.threshold-card:hover {
-  box-shadow: 0 8px 30px rgba(102, 126, 234, 0.15);
-  transform: translateY(-2px);
+  padding: 24px;
 }
 
 .threshold-item {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .threshold-item:last-child {
@@ -701,12 +510,164 @@ const downloadResult = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .threshold-label span {
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.help-icon {
+  color: var(--text-secondary);
+  cursor: help;
+  transition: color 0.3s;
+}
+
+.help-icon:hover {
+  color: var(--primary-color);
+}
+
+.progress-container {
+  padding: 30px;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.progress-text {
+  margin-top: 16px;
+  color: var(--text-secondary);
   font-weight: 500;
-  color: #2c3e50;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  padding-left: 12px;
+  border-left: 4px solid var(--primary-color);
+}
+
+.stats-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.stats-header {
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.total-count {
+  display: flex;
+  flex-direction: column;
+}
+
+.total-count .label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.total-count .value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--primary-color);
+}
+
+.custom-table {
+  background: transparent !important;
+}
+
+.custom-table :deep(th) {
+  background: rgba(249, 250, 251, 0.5) !important;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.custom-table :deep(tr) {
+  background: transparent !important;
+}
+
+.custom-table :deep(td) {
+  background: transparent !important;
+}
+
+.preview-container {
+  display: flex;
+  gap: 24px;
+  margin-top: 30px;
+  flex-wrap: wrap;
+}
+
+.image-wrapper {
+  flex: 1;
+  min-width: 400px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.image-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.image-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ml-2 {
+  margin-left: 8px;
+}
+
+.image-zoom-container {
+  flex: 1;
+  min-height: 400px;
+  background: rgba(243, 244, 246, 0.5);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+.image-zoom-container:active {
+  cursor: grabbing;
+}
+
+.image-zoom-container img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.canvas-container {
+  position: relative;
+}
+
+.detection-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 </style>

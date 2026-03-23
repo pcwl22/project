@@ -1,5 +1,0 @@
-USE `ultralytics_auth`;
-INSERT INTO `users` (`username`,`password`,`created_at`) VALUES ('admin', 'aws7ApJxhlivwj08T-Ba6w==$ATPok2Be1ZwbH67VcrgF7yNVh--ODf0EVQ7ZGvUx-lM=', '2025-10-29 23:36:58') ON DUPLICATE KEY UPDATE `password`=VALUES(`password`), `created_at`=VALUES(`created_at`);
-INSERT INTO `users` (`username`,`password`,`created_at`) VALUES ('user1', '3IB_Qp5-qFs6rrvfn9z4jg==$bGXxK280miVpHwLjUh2InYkw8bhds2aZSa6JtqLXGW8=', '2025-10-29 23:36:58') ON DUPLICATE KEY UPDATE `password`=VALUES(`password`), `created_at`=VALUES(`created_at`);
-INSERT INTO `users` (`username`,`password`,`created_at`) VALUES ('user2', 'd9XHndAV7rn4aA4rzoz_EA==$8UreiRoH-fz1EQMSlCIkijPg_JaXNQNNMopUffhBRNs=', '2025-10-29 23:36:58') ON DUPLICATE KEY UPDATE `password`=VALUES(`password`), `created_at`=VALUES(`created_at`);
-INSERT INTO `users` (`username`,`password`,`created_at`) VALUES ('22217020216', 'iGmeV_YCCVIb_CTAD2lXkw==$G_icjE6ZgD1kHaYHvo1fQARs9Z8mR8u-8JR30RqLTfc=', '2025-10-29 23:21:50') ON DUPLICATE KEY UPDATE `password`=VALUES(`password`), `created_at`=VALUES(`created_at`);

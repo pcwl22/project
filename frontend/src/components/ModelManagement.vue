@@ -1,11 +1,12 @@
 <template>
   <div class="model-management">
-    <el-card class="model-card">
-      <template #header>
-        <div class="card-header">
-          <span>上传模型权重</span>
+    <div class="model-card glass-card">
+      <div class="card-header">
+        <div class="header-icon">
+          <el-icon><UploadFilled /></el-icon>
         </div>
-      </template>
+        <span>上传模型权重</span>
+      </div>
       <div class="model-upload-section">
         <el-upload
           class="model-upload"
@@ -27,13 +28,13 @@
           </template>
         </el-upload>
         
-        <div v-if="modelFile" class="model-info">
-          <el-descriptions :column="1" border>
+        <div v-if="modelFile" class="model-info glass-card">
+          <el-descriptions :column="1" border class="custom-descriptions">
             <el-descriptions-item label="文件名">
-              {{ modelFile.name }}
+              <span class="info-text">{{ modelFile.name }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="文件大小">
-              {{ formatFileSize(modelFile.size) }}
+              <span class="info-text">{{ formatFileSize(modelFile.size) }}</span>
             </el-descriptions-item>
           </el-descriptions>
           
@@ -41,30 +42,34 @@
             type="primary" 
             @click="uploadModel"
             :loading="modelUploading"
-            style="margin-top: 20px; width: 100%;"
+            class="upload-btn"
           >
+            <el-icon><Upload /></el-icon>
             上传模型
           </el-button>
         </div>
       </div>
-    </el-card>
+    </div>
     
-    <el-card class="model-card" style="margin-top: 20px;">
-      <template #header>
-        <div class="card-header">
-          <span>当前模型</span>
+    <div class="model-card glass-card mt-6">
+      <div class="card-header">
+        <div class="header-icon">
+          <el-icon><Cpu /></el-icon>
         </div>
-      </template>
+        <span>当前模型</span>
+      </div>
       <div class="current-model">
         <el-alert
           title="当前使用的模型权重文件"
           type="info"
           :closable="false"
+          show-icon
+          class="custom-alert"
         >
-          <p>{{ currentModel || '默认模型' }}</p>
+          <p class="current-model-name">{{ currentModel || '默认模型' }}</p>
         </el-alert>
       </div>
-    </el-card>
+    </div>
   </div>
 </template>
 
@@ -73,7 +78,7 @@ import { ref } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { UploadFilled, Upload, Cpu } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   currentModel: string
@@ -106,7 +111,7 @@ const uploadModel = async () => {
 
   modelUploading.value = true
   const formData = new FormData()
-  formData.append('model', modelFile.value)
+  formData.append('file', modelFile.value)  // 修复：后端接收的参数名是 'file'
 
   try {
     await axios.post('http://localhost:8000/upload_model', formData, {
@@ -127,7 +132,7 @@ const uploadModel = async () => {
     modelFile.value = null
   } catch (error) {
     console.error('Error uploading model:', error)
-    ElMessage.error('模型上传失败')
+    ElMessage.error('模型上传失败，请检查后端服务是否正常运行')
   } finally {
     modelUploading.value = false
   }
@@ -146,96 +151,130 @@ const formatFileSize = (bytes: number) => {
 .model-management {
   max-width: 800px;
   margin: 0 auto;
+  padding: 20px;
 }
 
 .model-card {
-  border-radius: 12px;
-  border: none;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  animation: fadeInUp 0.6s ease-out;
+  padding: 24px;
+  margin-bottom: 24px;
 }
 
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.model-card:hover {
-  box-shadow: 0 8px 30px rgba(102, 126, 234, 0.15);
-  transform: translateY(-3px);
+.mt-6 {
+  margin-top: 24px;
 }
 
 .card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
   font-size: 18px;
-  font-weight: 600;
-  color: #2c3e50;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.header-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 20px;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 .model-upload-section {
-  padding: 20px 0;
+  padding: 10px 0;
 }
 
 .model-upload {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 :deep(.el-upload-dragger) {
-  border: 2px dashed #667eea;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f8f9ff 0%, #faf5ff 100%);
+  border: 2px dashed rgba(99, 102, 241, 0.3);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.5);
   transition: all 0.3s ease;
+  padding: 40px;
 }
 
 :deep(.el-upload-dragger:hover) {
-  border-color: #764ba2;
-  background: linear-gradient(135deg, #f0f1ff 0%, #f5ebff 100%);
+  border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.8);
+  transform: translateY(-2px);
 }
 
 :deep(.el-icon--upload) {
-  font-size: 67px;
-  color: #667eea;
+  font-size: 64px;
+  color: var(--primary-color);
   margin-bottom: 16px;
+  filter: drop-shadow(0 4px 8px rgba(99, 102, 241, 0.2));
 }
 
 :deep(.el-upload__text) {
-  color: #606266;
-  font-size: 14px;
+  color: var(--text-secondary);
+  font-size: 15px;
 }
 
 :deep(.el-upload__text em) {
-  color: #667eea;
+  color: var(--primary-color);
+  font-weight: 600;
   font-style: normal;
 }
 
 :deep(.el-upload__tip) {
-  color: #909399;
-  font-size: 12px;
-  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-top: 12px;
+  text-align: center;
 }
 
 .model-info {
+  margin-top: 24px;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.custom-descriptions :deep(.el-descriptions__cell) {
+  background: transparent;
+}
+
+.info-text {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.upload-btn {
   margin-top: 20px;
-  padding: 20px;
-  background: #f8f9ff;
+  width: 100%;
+  height: 44px;
+  font-size: 16px;
+  font-weight: 600;
   border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .current-model {
   padding: 10px 0;
 }
 
-:deep(.el-alert) {
-  border-radius: 8px;
+.custom-alert {
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.1);
+  padding: 16px;
 }
 
-:deep(.el-descriptions) {
-  border-radius: 8px;
+.current-model-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin: 8px 0 0 0;
 }
 </style>

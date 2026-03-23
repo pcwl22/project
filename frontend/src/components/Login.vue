@@ -1,30 +1,37 @@
 <template>
   <div class="login-container">
-    <div class="login-box">
+    <div class="login-box glass-card">
       <div class="login-header">
-        <h2>超市空货架检测系统</h2>
-        <p>基于 YOLOv8 的智能检测</p>
+        <div class="logo-icon">
+          <el-icon><Monitor /></el-icon>
+        </div>
+        <h2>ShelfDetect</h2>
+        <p>智能货架监测系统</p>
       </div>
+      
       <el-tabs v-model="activeMode" class="login-tabs">
         <el-tab-pane label="登录" name="login"></el-tab-pane>
         <el-tab-pane label="注册" name="register"></el-tab-pane>
       </el-tabs>
+
       <el-form :model="loginForm" :rules="rules" ref="loginFormRef" class="login-form">
         <el-form-item prop="username">
           <el-input
             v-model="loginForm.username"
-            placeholder="请输入用户名"
+            placeholder="用户名"
             prefix-icon="User"
             size="large"
+            class="custom-input"
           />
         </el-form-item>
         <el-form-item prop="password">
           <el-input
             v-model="loginForm.password"
             type="password"
-            placeholder="请输入密码"
+            placeholder="密码"
             prefix-icon="Lock"
             size="large"
+            class="custom-input"
             @keyup.enter="activeMode === 'login' ? handleLogin() : null"
           />
         </el-form-item>
@@ -32,19 +39,20 @@
           <el-input
             v-model="loginForm.confirmPassword"
             type="password"
-            placeholder="请再次输入密码"
+            placeholder="确认密码"
             prefix-icon="Lock"
             size="large"
+            class="custom-input"
           />
         </el-form-item>
         <el-form-item prop="captcha" v-if="activeMode === 'register'">
-          <div style="display: flex; gap: 10px; width: 100%;">
+          <div class="captcha-wrapper">
             <el-input
               v-model="loginForm.captcha"
-              placeholder="请输入验证码"
+              placeholder="验证码"
               prefix-icon="Key"
               size="large"
-              style="flex: 1;"
+              class="custom-input"
               @keyup.enter="handleRegister"
             />
             <div class="captcha-box" @click="refreshCaptcha">
@@ -52,6 +60,44 @@
             </div>
           </div>
         </el-form-item>
+        
+        <!-- 注册时的安全问题 -->
+        <el-form-item v-if="activeMode === 'register'" prop="securityQuestion">
+          <el-select
+            v-model="loginForm.securityQuestion"
+            placeholder="选择或输入安全问题（必填）"
+            size="large"
+            class="custom-input"
+            allow-create
+            filterable
+            default-first-option
+          >
+            <el-option label="您的出生地是？" value="您的出生地是？" />
+            <el-option label="您母亲的姓名是？" value="您母亲的姓名是？" />
+            <el-option label="您的小学名称是？" value="您的小学名称是？" />
+            <el-option label="您最喜欢的颜色是？" value="您最喜欢的颜色是？" />
+            <el-option label="您的宠物名字是？" value="您的宠物名字是？" />
+            <el-option label="您最喜欢的电影是？" value="您最喜欢的电影是？" />
+            <el-option label="您父亲的生日是？" value="您父亲的生日是？" />
+            <el-option label="您的学号是？" value="您的学号是？" />
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item v-if="activeMode === 'register'" prop="securityAnswer">
+          <el-input
+            v-model="loginForm.securityAnswer"
+            placeholder="安全答案（必填）"
+            prefix-icon="Key"
+            size="large"
+            class="custom-input"
+          />
+        </el-form-item>
+        
+        <!-- 忘记密码链接 -->
+        <div v-if="activeMode === 'login'" class="forgot-password-link">
+          <el-link type="primary" @click="showForgotPassword = true">忘记密码？</el-link>
+        </div>
+        
         <el-form-item>
           <el-button
             type="primary"
@@ -60,35 +106,37 @@
             class="login-button"
             size="large"
           >
-            {{ activeMode === 'login' ? '登录' : '注册' }}
+            {{ activeMode === 'login' ? '登 录' : '注 册' }}
           </el-button>
         </el-form-item>
       </el-form>
-      <div class="login-footer" v-if="activeMode === 'login'">
-        <p>没有账号？<el-button type="primary" link @click="activeMode = 'register'">去注册</el-button></p>
-      </div>
-      <div class="login-footer" v-else>
-        <p>已有账号？<el-button type="primary" link @click="activeMode = 'login'">去登录</el-button></p>
-      </div>
     </div>
+    
+    <!-- 忘记密码对话框 -->
+    <ForgotPassword v-model="showForgotPassword" @success="handleForgotPasswordSuccess" />
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, reactive } from 'vue'
 import { ElMessage, FormInstance, FormRules } from 'element-plus'
+import { Monitor } from '@element-plus/icons-vue'
+import ForgotPassword from './ForgotPassword.vue'
 
 const emit = defineEmits(['login-success'])
 
 const loginFormRef = ref<FormInstance>()
 const loading = ref(false)
 const activeMode = ref('login')
+const showForgotPassword = ref(false)
 
 const loginForm = reactive({
   username: '',
   password: '',
   confirmPassword: '',
-  captcha: ''
+  captcha: '',
+  securityQuestion: '',
+  securityAnswer: ''
 })
 
 // 验证码生成
@@ -151,6 +199,13 @@ const rules: FormRules = {
   ],
   captcha: [
     { validator: validateCaptcha, trigger: 'blur' }
+  ],
+  securityQuestion: [
+    { required: true, message: '请选择或输入安全问题', trigger: 'change' }
+  ],
+  securityAnswer: [
+    { required: true, message: '请输入安全答案', trigger: 'blur' },
+    { min: 2, message: '安全答案长度不能小于2位', trigger: 'blur' }
   ]
 }
 
@@ -199,7 +254,14 @@ const handleRegister = async () => {
         const response = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(loginForm)
+          body: JSON.stringify({
+            username: loginForm.username,
+            password: loginForm.password,
+            confirmPassword: loginForm.confirmPassword,
+            captcha: loginForm.captcha,
+            security_question: loginForm.securityQuestion,
+            security_answer: loginForm.securityAnswer
+          })
         })
         
         if (response.ok) {
@@ -222,6 +284,11 @@ const handleRegister = async () => {
     }
   })
 }
+
+const handleForgotPasswordSuccess = () => {
+  ElMessage.success('密码已重置，请使用新密码登录')
+  activeMode.value = 'login'
+}
 </script>
 
 <style scoped>
@@ -231,118 +298,150 @@ const handleRegister = async () => {
   justify-content: center;
   align-items: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.forgot-password-link {
+  text-align: right;
+  margin-bottom: 15px;
+}
+
+/* Background Decoration */
+.login-container::before {
+  content: '';
+  position: absolute;
+  top: -10%;
+  left: -10%;
+  width: 50%;
+  height: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.login-container::after {
+  content: '';
+  position: absolute;
+  bottom: -10%;
+  right: -10%;
+  width: 50%;
+  height: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  border-radius: 50%;
 }
 
 .login-box {
   width: 100%;
-  max-width: 400px;
-  background: white;
-  border-radius: 16px;
+  max-width: 420px;
   padding: 40px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  animation: fadeInScale 0.5s ease-out;
+  position: relative;
+  z-index: 1;
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes fadeInScale {
+@keyframes slideUp {
   from {
     opacity: 0;
-    transform: scale(0.9);
+    transform: translateY(40px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0);
   }
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 40px;
+}
+
+.logo-icon {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 32px;
+  margin: 0 auto 20px;
+  box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
 }
 
 .login-header h2 {
   margin: 0;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
   color: #2c3e50;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  letter-spacing: -0.5px;
 }
 
 .login-header p {
   margin: 8px 0 0;
   font-size: 14px;
-  color: #909399;
+  color: #6b7280;
 }
 
 .login-tabs {
-  margin-top: 20px;
+  margin-bottom: 30px;
+}
+
+.login-tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+  background-color: rgba(0,0,0,0.05);
 }
 
 .login-tabs :deep(.el-tabs__item) {
   font-size: 16px;
+  font-weight: 500;
+  color: #6b7280;
 }
 
-.login-form {
-  margin-top: 30px;
+.login-tabs :deep(.el-tabs__item.is-active) {
+  color: var(--primary-color);
+  font-weight: 600;
 }
 
-.login-button {
-  width: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
+.login-tabs :deep(.el-tabs__active-bar) {
+  background-color: var(--primary-color);
+  height: 3px;
+  border-radius: 3px;
+}
+
+.custom-input :deep(.el-input__wrapper) {
+  background: rgba(243, 244, 246, 0.6);
+  box-shadow: none;
+  border: 1px solid transparent;
   transition: all 0.3s ease;
 }
 
-.login-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+.custom-input :deep(.el-input__wrapper:hover),
+.custom-input :deep(.el-input__wrapper.is-focus) {
+  background: white;
+  box-shadow: 0 0 0 1px var(--primary-color);
 }
 
-.login-footer {
-  text-align: center;
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #e4e7ed;
-}
-
-.login-footer p {
-  margin: 0;
-  font-size: 12px;
-  color: #909399;
-}
-
-:deep(.el-input__wrapper) {
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
-
-:deep(.el-input__wrapper:hover) {
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
-}
-
-:deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+.captcha-wrapper {
+  display: flex;
+  gap: 12px;
 }
 
 .captcha-box {
   width: 120px;
   height: 40px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  user-select: none;
   transition: all 0.3s ease;
 }
 
 .captcha-box:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 .captcha-text {
@@ -350,6 +449,23 @@ const handleRegister = async () => {
   font-weight: bold;
   color: white;
   letter-spacing: 4px;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.login-button {
+  width: 100%;
+  height: 48px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  border: none;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.login-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
 }
 </style>
