@@ -10,6 +10,18 @@
 
       <div class="controls">
         <div class="control-item">
+          <label>检测模型</label>
+          <el-select v-model="selectedModel" placeholder="选择模型">
+            <el-option
+              v-for="model in modelList"
+              :key="model"
+              :label="model"
+              :value="model"
+            />
+          </el-select>
+        </div>
+
+        <div class="control-item">
           <label>摄像头设备</label>
           <el-select v-model="selectedCamera" placeholder="选择摄像头">
             <el-option
@@ -86,6 +98,10 @@
           <span class="stat-value danger">{{ currentStats.empty_count }}</span>
         </div>
         <div class="stat-item">
+          <span class="stat-label">最大值</span>
+          <span class="stat-value warning">{{ maxEmptyCount }}</span>
+        </div>
+        <div class="stat-item">
           <span class="stat-label">缺货率</span>
           <span class="stat-value" :class="{ danger: currentStats.empty_rate > 0.2 }">
             {{ (currentStats.empty_rate * 100).toFixed(1) }}%
@@ -101,9 +117,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
+
+const props = defineProps<{
+  selectedModel?: string
+  modelList?: string[]
+}>()
+
+const emit = defineEmits<{
+  (e: 'update:selectedModel', model: string): void
+}>()
+
+// 使用本地 ref 并通过 watch 同步
+const selectedModel = ref(props.selectedModel || 'best.pt')
+
+// 监听 props 变化，更新本地值
+watch(() => props.selectedModel, (newVal) => {
+  if (newVal && newVal !== selectedModel.value) {
+    selectedModel.value = newVal
+  }
+})
+
+// 监听本地值变化，emit 给父组件
+watch(selectedModel, (newVal) => {
+  emit('update:selectedModel', newVal)
+})
+
+// 默认模型列表
+const modelList = ref(props.modelList || ['best.pt', 'yolov8n.pt', 'yolov8s.pt'])
+
+// 监听 props.modelList 变化
+watch(() => props.modelList, (newVal) => {
+  if (newVal) {
+    modelList.value = newVal
+  }
+})
 
 interface Camera {
   deviceId: string
@@ -137,6 +187,10 @@ const isDetecting = ref(false)
 const isStarting = ref(false)
 const currentStats = ref<DetectionStats | null>(null)
 const fps = ref(0)
+const maxEmptyCount = ref(0)  // 记录空货架最大值
+const maxEmptyDetections = ref<Detection[]>([])  // 记录空货架最多的那一帧的检测框
+const maxEmptyFrameBlob = ref<Blob | null>(null)  // 记录空货架最多的那一帧的图片
+const sessionStartTime = ref<Date | null>(null)  // 记录会话开始时间
 
 let mediaStream: MediaStream | null = null
 let detectionTimer: number | null = null
@@ -229,11 +283,11 @@ const detectFrame = async () => {
     const formData = new FormData()
     formData.append('file', blob, 'frame.jpg')
 
-    const userId = localStorage.getItem('userId') || '0'
-
+    // 注意：这里不传 user_id 和 mode，避免保存到数据库
+    // 只在停止检测时才保存记录
     const startTime = performance.now()
     const response = await axios.post(
-      `http://localhost:8000/detect?conf=${confidence.value}&iou=${iouThreshold.value}&user_id=${userId}`,
+      `http://localhost:8000/api/detect?model=${selectedModel.value}&conf=${confidence.value}&iou=${iouThreshold.value}`,
       formData,
       {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -250,13 +304,28 @@ const detectFrame = async () => {
     if (response.data && response.data.detections) {
       drawDetections(response.data.detections)
       
+      const emptyCount = response.data.detections.filter((d: Detection) => 
+        d.class_name.toLowerCase().includes('empty')
+      ).length
+      
+      // 更新空货架最大值，并保存该帧的检测框
+      if (emptyCount > maxEmptyCount.value) {
+        maxEmptyCount.value = emptyCount
+        maxEmptyDetections.value = response.data.detections  // 保存检测框数据
+        
+        // 保存该帧的截图（用于最后保存记录）
+        canvas.toBlob((b) => {
+          if (b) {
+            maxEmptyFrameBlob.value = b
+          }
+        }, 'image/jpeg', 0.9)
+      }
+      
       currentStats.value = {
         product_count: response.data.detections.filter((d: Detection) => 
           !d.class_name.toLowerCase().includes('empty')
         ).length,
-        empty_count: response.data.detections.filter((d: Detection) => 
-          d.class_name.toLowerCase().includes('empty')
-        ).length,
+        empty_count: emptyCount,
         total_slots: response.data.detections.length,
         empty_rate: response.data.empty_rate || 0
       }
@@ -292,7 +361,7 @@ const drawDetections = (detections: Detection[]) => {
     ctx.fillRect(detection.x1, detection.y1, width, height)
     ctx.strokeRect(detection.x1, detection.y1, width, height)
 
-    const label = `${detection.class_name} ${(detection.confidence * 100).toFixed(0)}%`
+    const label = `${(detection.confidence * 100).toFixed(0)}%`
     ctx.font = '14px Arial'
     const textWidth = ctx.measureText(label).width
     
@@ -311,6 +380,10 @@ const startDetection = async () => {
 
   isDetecting.value = true
   lastFrameTime = performance.now()
+  sessionStartTime.value = new Date()  // 记录会话开始时间
+  maxEmptyCount.value = 0  // 重置空货架最大值
+  maxEmptyDetections.value = []  // 重置检测框数据
+  maxEmptyFrameBlob.value = null  // 重置图片数据
 
   const intervalMs = detectionInterval.value * 1000
   detectionTimer = window.setInterval(detectFrame, intervalMs)
@@ -318,12 +391,24 @@ const startDetection = async () => {
   detectFrame()
 }
 
-const stopDetection = () => {
+const stopDetection = async () => {
+  // 停止检测
   isDetecting.value = false
   
   if (detectionTimer) {
     clearInterval(detectionTimer)
     detectionTimer = null
+  }
+
+  // 只保存空货架最多的那一帧记录到数据库
+  if (sessionStartTime.value && maxEmptyCount.value > 0 && maxEmptyFrameBlob.value) {
+    try {
+      await saveCameraSession()
+      ElMessage.success(`摄像头检测记录已保存（空货架最大值: ${maxEmptyCount.value}）`)
+    } catch (error) {
+      console.error('保存摄像头检测记录失败:', error)
+      ElMessage.error('保存检测记录失败')
+    }
   }
 
   if (canvasElement.value) {
@@ -334,6 +419,39 @@ const stopDetection = () => {
   }
 
   currentStats.value = null
+  sessionStartTime.value = null
+}
+
+// 保存摄像头检测会话记录（只保存一次）
+const saveCameraSession = async () => {
+  try {
+    const userId = localStorage.getItem('userId') || '0'
+    
+    // 使用保存的空货架最多的那一帧图片
+    if (!maxEmptyFrameBlob.value) {
+      console.warn('没有保存的最大空货架帧图片')
+      return
+    }
+    
+    const formData = new FormData()
+    formData.append('file', maxEmptyFrameBlob.value, `camera_session_${Date.now()}.jpg`)
+    
+    // 将检测框数据转换为JSON字符串
+    const detectionsJson = JSON.stringify(maxEmptyDetections.value)
+    
+    const response = await axios.post(
+      `http://localhost:8000/api/detect?mode=camera&model=${selectedModel.value}&conf=${confidence.value}&iou=${iouThreshold.value}&user_id=${userId}&max_empty_count=${maxEmptyCount.value}&detections_json=${encodeURIComponent(detectionsJson)}`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      }
+    )
+    
+    console.log('保存摄像头记录响应:', response.data)
+  } catch (error) {
+    console.error('保存摄像头检测记录失败:', error)
+    throw error
+  }
 }
 
 const toggleDetection = async () => {
@@ -368,7 +486,38 @@ const captureSnapshot = () => {
   }
 }
 
+// 加载保存的阈值
+const loadThresholds = async () => {
+  try {
+    const response = await axios.get('/api/config/thresholds')
+    if (response.data) {
+      confidence.value = response.data.conf_threshold
+      iouThreshold.value = response.data.iou_threshold
+    }
+  } catch (error) {
+    console.error('加载阈值失败:', error)
+  }
+}
+
+// 保存阈值
+const saveThresholds = async () => {
+  try {
+    await axios.put('/api/config/thresholds', {
+      conf_threshold: confidence.value,
+      iou_threshold: iouThreshold.value
+    })
+  } catch (error) {
+    console.error('保存阈值失败:', error)
+  }
+}
+
+// 监听阈值变化并保存
+watch([confidence, iouThreshold], () => {
+  saveThresholds()
+})
+
 onMounted(async () => {
+  await loadThresholds()
   await getCameras()
   if (cameras.value.length > 0) {
     await startCamera()
@@ -482,7 +631,7 @@ onUnmounted(() => {
 
 .stats-panel {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 15px;
 }
 
@@ -509,5 +658,9 @@ onUnmounted(() => {
 
 .stat-value.danger {
   color: #ff4444;
+}
+
+.stat-value.warning {
+  color: #ff9800;
 }
 </style>

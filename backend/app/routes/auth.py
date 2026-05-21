@@ -56,13 +56,21 @@ def hash_password(password: str) -> str:
 
 @router.post("/login", response_model=LoginResponse)
 def login(req: LoginRequest, db: Session = Depends(get_db)):
+	print(f"\n[登录请求] 用户名: {req.username}, 密码: {req.password}")
+	
 	user = db.query(User).filter(User.username == req.username).first()
 	
 	if not user:
+		print(f"[登录失败] 用户不存在: {req.username}")
 		raise HTTPException(status_code=401, detail="用户名或密码错误")
+	
+	print(f"[数据库] 用户名: {user.username}, 密码: {user.password}")
+	print(f"[密码比对] 明文匹配: {user.password == req.password}")
+	print(f"[密码比对] MD5匹配: {user.password == hash_password(req.password)}")
 	
 	# 检查密码（支持明文和哈希两种方式）
 	if user.password != req.password and user.password != hash_password(req.password):
+		print(f"[登录失败] 密码错误")
 		raise HTTPException(status_code=401, detail="用户名或密码错误")
 	
 	# 判断是否为管理员（简单规则：用户名包含admin）

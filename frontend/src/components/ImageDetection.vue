@@ -197,7 +197,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
@@ -206,10 +206,12 @@ import { QuestionFilled, ZoomIn, ZoomOut, RefreshRight, Download, Picture, Caret
 const props = defineProps<{
   modelList: string[]
   currentUserId: number | null
+  selectedModel?: string  // 添加选中的模型
 }>()
 
 const emit = defineEmits<{
   (e: 'detection-complete', record: any): void
+  (e: 'update:selectedModel', model: string): void  // 添加模型更新事件
 }>()
 
 interface Detection {
@@ -232,7 +234,21 @@ interface StatsTableRow {
   percentage: number
 }
 
-const selectedModel = ref('best.pt')
+// 使用本地 ref 并通过 watch 同步
+const selectedModel = ref(props.selectedModel || 'best.pt')
+
+// 监听 props 变化，更新本地值
+watch(() => props.selectedModel, (newVal) => {
+  if (newVal && newVal !== selectedModel.value) {
+    selectedModel.value = newVal
+  }
+})
+
+// 监听本地值变化，emit 给父组件
+watch(selectedModel, (newVal) => {
+  emit('update:selectedModel', newVal)
+})
+
 const confidence = ref(0.25)
 const iouThreshold = ref(0.45)
 
@@ -259,8 +275,15 @@ const statsTableData = computed<StatsTableRow[]>(() => {
   const total = getTotalDetections()
   if (total === 0) return []
   
+  // 类别名称映射
+  const nameMapping: Record<string, string> = {
+    'product': '商品',
+    'empty_shelf': '算法',
+    'missing': '空货架'
+  }
+  
   return Object.entries(detectionStats.value).map(([name, count]): StatsTableRow => ({
-    name,
+    name: nameMapping[name] || name,  // 使用映射后的名称，如果没有映射则使用原名称
     count: Number(count),
     percentage: Number(((Number(count) / total) * 100).toFixed(1))
   }))
@@ -369,25 +392,67 @@ const drawDetections = () => {
   const ctx = canvas.value.getContext('2d')
   if (!ctx) return
 
+  // 先清空画布
   ctx.clearRect(0, 0, canvas.value.width, canvas.value.height)
+  
+  // 🔧 修复：先绘制原始图片到canvas
+  ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight)
 
+  // 然后绘制检测框
   detections.value.forEach((det: Detection) => {
-    const isEmpty = det.class_name.toLowerCase().includes('empty')
-    ctx.strokeStyle = isEmpty ? '#ef4444' : '#22c55e'
+    // 判断是否为空货架
+    const isEmpty = det.class_name.toLowerCase().includes('empty') || 
+                    det.class_name.toLowerCase().includes('空') ||
+                    det.class_name.toLowerCase().includes('missing') ||
+                    det.class_name.toLowerCase().includes('vacant') ||
+                    det.class_name.toLowerCase().includes('gap') ||
+                    det.class_name.toLowerCase().includes('缺货')
+    
+    // 根据类型和来源设置颜色
+    let color = '#22c55e' // 绿色：商品
+    let isDashed = false
+    
+    if (isEmpty) {
+      if (det.confidence < 0) {
+        // 算法推算的空货架：蓝色虚线
+        color = '#3b82f6' // 蓝色
+        isDashed = true
+      } else {
+        // 模型检测的空货架：红色实线
+        color = '#ef4444' // 红色
+        isDashed = false
+      }
+    }
+    
+    ctx.strokeStyle = color
     ctx.lineWidth = 3
 
     const x = Math.round(det.x1)
     const y = Math.round(det.y1)
     const width = Math.round(det.x2 - det.x1)
     const height = Math.round(det.y2 - det.y1)
-    ctx.strokeRect(x, y, width, height)
+    
+    // 绘制矩形框
+    if (isDashed) {
+      // 绘制虚线
+      ctx.setLineDash([10, 5])
+      ctx.strokeRect(x, y, width, height)
+      ctx.setLineDash([])
+    } else {
+      // 绘制实线
+      ctx.strokeRect(x, y, width, height)
+    }
 
-    const label = `${det.class_name} ${det.confidence.toFixed(2)}`
+    // 绘制标签（只显示置信度）
+    const label = det.confidence < 0 
+      ? '算法' 
+      : `${det.confidence.toFixed(2)}`
+    
     ctx.font = 'bold 16px Inter'
     const textMetrics = ctx.measureText(label)
     const textWidth = textMetrics.width
     const textHeight = 24
-    ctx.fillStyle = isEmpty ? '#ef4444' : '#22c55e'
+    ctx.fillStyle = color
     ctx.fillRect(x, y - textHeight, textWidth + 10, textHeight)
     
     ctx.fillStyle = '#ffffff'
@@ -463,6 +528,41 @@ const downloadResult = () => {
   link.click()
   ElMessage.success('图片已下载')
 }
+
+// 加载保存的阈值
+const loadThresholds = async () => {
+  try {
+    const response = await axios.get('/api/config/thresholds')
+    if (response.data) {
+      confidence.value = response.data.conf_threshold
+      iouThreshold.value = response.data.iou_threshold
+    }
+  } catch (error) {
+    console.error('加载阈值失败:', error)
+  }
+}
+
+// 保存阈值
+const saveThresholds = async () => {
+  try {
+    await axios.put('/api/config/thresholds', {
+      conf_threshold: confidence.value,
+      iou_threshold: iouThreshold.value
+    })
+  } catch (error) {
+    console.error('保存阈值失败:', error)
+  }
+}
+
+// 监听阈值变化并保存
+watch([confidence, iouThreshold], () => {
+  saveThresholds()
+})
+
+// 组件挂载时加载阈值
+onMounted(() => {
+  loadThresholds()
+})
 </script>
 
 <style scoped>

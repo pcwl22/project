@@ -59,17 +59,21 @@
                 v-if="activeTab === 'image'"
                 :model-list="modelList" 
                 :current-user-id="currentUserId"
+                v-model:selected-model="currentModel"
                 @detection-complete="handleDetectionComplete"
               />
 
               <VideoDetection 
                 v-if="activeTab === 'video'"
                 :model-list="modelList"
+                v-model:selected-model="currentModel"
                 @detection-complete="handleVideoDetectionComplete"
               />
 
               <CameraDetection 
                 v-if="activeTab === 'camera'"
+                v-model:selected-model="currentModel"
+                :model-list="modelList"
               />
 
               <HistoryView 
@@ -86,6 +90,11 @@
                 v-if="activeTab === 'model'"
                 v-model:current-model="currentModel"
                 v-model:model-list="modelList"
+                :is-admin="isAdmin"
+              />
+
+              <AlgorithmSettings 
+                v-if="activeTab === 'settings'"
               />
             </div>
           </transition>
@@ -96,7 +105,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ElConfigProvider } from 'element-plus'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
@@ -107,6 +116,7 @@ import VideoDetection from './components/VideoDetection.vue'
 import CameraDetection from './components/CameraDetection.vue'
 import ModelManagement from './components/ModelManagement.vue'
 import UserManagement from './components/UserManagement.vue'
+import AlgorithmSettings from './components/AlgorithmSettings.vue'
 
 const isLoggedIn = ref(false)
 const currentUserId = ref<number | null>(null)
@@ -137,6 +147,7 @@ const menuItems = computed(() => {
     { id: 'video', label: '视频检测', icon: 'VideoCamera' },
     { id: 'camera', label: '摄像头检测', icon: 'Camera' },
     { id: 'history', label: '检测历史', icon: 'Clock' },
+    { id: 'settings', label: '算法设置', icon: 'Setting' },
     { id: 'model', label: '模型管理', icon: 'Cpu' },
   ]
   
@@ -158,6 +169,7 @@ const getCurrentPageDesc = () => {
     video: '处理监控视频流并分析货架状态',
     camera: '使用摄像头进行实时货架检测',
     history: '查看过往的检测记录和统计数据',
+    settings: '调整空货架检测算法参数',
     model: '管理和更新 YOLOv8 检测模型',
     users: '系统用户权限与账户管理'
   }
@@ -165,8 +177,115 @@ const getCurrentPageDesc = () => {
 }
 
 // 模型相关
-const currentModel = ref('')
-const modelList = ref(['best.pt', 'yolov8n.pt', 'yolov8s.pt', 'yolov8m.pt', 'yolov8l.pt', 'yolov8x.pt'])
+const currentModel = ref('best.pt')  // 默认模型
+const modelList = ref<string[]>([])
+
+// 从后端获取模型列表
+const fetchModelList = async () => {
+  try {
+    const response = await fetch('http://localhost:8000/api/models')
+    const data = await response.json()
+    
+    if (data.models && data.models.length > 0) {
+      modelList.value = data.models
+      localStorage.setItem('modelList', JSON.stringify(data.models))
+      console.log('✅ 已从服务器更新模型列表:', data.models)
+      
+      // 如果当前选择的模型不在列表中，切换到第一个模型
+      if (!data.models.includes(currentModel.value)) {
+        console.log(`⚠️ 当前模型 ${currentModel.value} 不存在，切换到 ${data.models[0]}`)
+        currentModel.value = data.models[0]
+      }
+    }
+  } catch (error) {
+    console.error('❌ 获取模型列表失败:', error)
+    // 失败时从 localStorage 加载
+    loadModelListFromStorage()
+  }
+}
+
+// 从 localStorage 加载模型列表（备用方案）
+const loadModelListFromStorage = () => {
+  const savedList = localStorage.getItem('modelList')
+  if (savedList) {
+    try {
+      modelList.value = JSON.parse(savedList)
+      console.log('📦 从缓存加载模型列表:', modelList.value)
+    } catch (e) {
+      console.error('Failed to parse model list:', e)
+      modelList.value = ['best.pt', 'yolov8n.pt', 'yolov8s.pt', 'yolov8m.pt', 'yolov8l.pt', 'yolov8x.pt']
+    }
+  } else {
+    modelList.value = ['best.pt', 'yolov8n.pt', 'yolov8s.pt', 'yolov8m.pt', 'yolov8l.pt', 'yolov8x.pt']
+  }
+}
+
+// 从 localStorage 加载当前选择的模型
+const loadCurrentModel = () => {
+  const savedModel = localStorage.getItem('currentModel')
+  if (savedModel) {
+    currentModel.value = savedModel
+    console.log('已加载上次使用的模型:', savedModel)
+  }
+}
+
+// 保存模型列表到 localStorage
+const saveModelList = (list: string[]) => {
+  modelList.value = list
+  localStorage.setItem('modelList', JSON.stringify(list))
+}
+
+// 初始化：先加载缓存，再从服务器更新
+loadCurrentModel()
+loadModelListFromStorage()
+fetchModelList()
+
+// 定期从服务器刷新模型列表（每30秒）
+let modelRefreshTimer: number | null = null
+const startModelRefresh = () => {
+  // 清除旧的定时器
+  if (modelRefreshTimer) {
+    clearInterval(modelRefreshTimer)
+  }
+  
+  // 每30秒刷新一次
+  modelRefreshTimer = setInterval(() => {
+    console.log('🔄 定期刷新模型列表...')
+    fetchModelList()
+  }, 30000) // 30秒
+}
+
+// 停止定期刷新
+const stopModelRefresh = () => {
+  if (modelRefreshTimer) {
+    clearInterval(modelRefreshTimer)
+    modelRefreshTimer = null
+  }
+}
+
+// 组件挂载时启动定期刷新
+onMounted(() => {
+  startModelRefresh()
+  console.log('✅ 已启动模型列表自动刷新（每30秒）')
+})
+
+// 组件卸载时停止定期刷新
+onUnmounted(() => {
+  stopModelRefresh()
+  console.log('🛑 已停止模型列表自动刷新')
+})
+
+// 监听 currentModel 的变化，自动保存到 localStorage
+watch(currentModel, (newModel) => {
+  localStorage.setItem('currentModel', newModel)
+  console.log('当前模型已更新:', newModel)
+})
+
+// 监听 modelList 的变化，自动保存到 localStorage
+watch(modelList, (newList) => {
+  localStorage.setItem('modelList', JSON.stringify(newList))
+  console.log('模型列表已更新:', newList)
+}, { deep: true })
 
 const historyViewRef = ref()
 

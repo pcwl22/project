@@ -20,7 +20,17 @@
       
       <el-table v-else :data="historyList" stripe style="width: 100%">
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="image_path" label="图片名称" width="200">
+        <el-table-column prop="file_type" label="类型" width="100">
+          <template #default="scope">
+            <el-tag 
+              :type="scope.row.file_type === 'video' ? 'warning' : scope.row.file_type === 'camera' ? 'success' : 'info'" 
+              size="small"
+            >
+              {{ scope.row.file_type === 'video' ? '视频' : scope.row.file_type === 'camera' ? '摄像头' : '图片' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="image_path" label="文件名称" width="200">
           <template #default="scope">
             {{ getFileName(scope.row.image_path) }}
           </template>
@@ -30,12 +40,31 @@
             {{ formatDate(scope.row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column prop="detection_count" label="检测数量" width="100" />
-        <el-table-column label="检测结果" width="150">
+        <el-table-column prop="total_detections" label="检测数量" width="150">
           <template #default="scope">
-            <el-tag v-for="(count, name) in scope.row.stats" :key="name" size="small" style="margin: 2px;">
-              {{ name }}: {{ count }}
+            <el-tag v-if="scope.row.file_type === 'video' || scope.row.file_type === 'camera'" type="info" size="small">
+              点击查看详情
             </el-tag>
+            <el-tag v-else type="success" size="small">
+              总数: {{ scope.row.total_detections }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="检测详情" width="200">
+          <template #default="scope">
+            <div v-if="scope.row.file_type === 'video' || scope.row.file_type === 'camera'">
+              <el-tag type="warning" size="small">
+                空货架最大值: {{ scope.row.max_empty_count || 0 }}
+              </el-tag>
+            </div>
+            <div v-else style="display: flex; gap: 5px; flex-wrap: wrap;">
+              <el-tag type="primary" size="small">
+                商品: {{ scope.row.product_count }}
+              </el-tag>
+              <el-tag type="danger" size="small" v-if="scope.row.empty_count > 0">
+                空位: {{ scope.row.empty_count }}
+              </el-tag>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
@@ -68,18 +97,36 @@
       <div v-if="currentRecord" class="detail-container">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="检测ID">{{ currentRecord.id }}</el-descriptions-item>
-          <el-descriptions-item label="图片名称">{{ getFileName(currentRecord.image_path) }}</el-descriptions-item>
-          <el-descriptions-item label="检测时间">{{ formatDate(currentRecord.created_at) }}</el-descriptions-item>
-          <el-descriptions-item label="检测数量">{{ currentRecord.detection_count }}</el-descriptions-item>
-          <el-descriptions-item label="置信度阈值">
-            <el-tag type="success">{{ currentRecord.confidence || 0.25 }}</el-tag>
+          <el-descriptions-item label="文件类型">
+            <el-tag 
+              :type="currentRecord.file_type === 'video' ? 'warning' : currentRecord.file_type === 'camera' ? 'success' : 'info'" 
+              size="small"
+            >
+              {{ currentRecord.file_type === 'video' ? '视频' : currentRecord.file_type === 'camera' ? '摄像头' : '图片' }}
+            </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="IOU阈值">
-            <el-tag type="info">{{ currentRecord.iou || 0.45 }}</el-tag>
+          <el-descriptions-item label="文件名称">{{ getFileName(currentRecord.image_path) }}</el-descriptions-item>
+          <el-descriptions-item label="检测时间">{{ formatDate(currentRecord.created_at) }}</el-descriptions-item>
+          <el-descriptions-item label="检测数量" v-if="currentRecord.file_type !== 'video' && currentRecord.file_type !== 'camera'">
+            <el-tag type="success" size="small">总数: {{ currentRecord.total_detections || 0 }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="检测详情" v-if="currentRecord.file_type !== 'video' && currentRecord.file_type !== 'camera'">
+            <div style="display: flex; gap: 8px;">
+              <el-tag type="primary" size="small">商品: {{ currentRecord.product_count || 0 }}</el-tag>
+              <el-tag type="danger" size="small" v-if="(currentRecord.empty_count || 0) > 0">
+                空位: {{ currentRecord.empty_count }}
+              </el-tag>
+            </div>
+          </el-descriptions-item>
+          <el-descriptions-item label="空位率" v-if="currentRecord.file_type !== 'video' && currentRecord.file_type !== 'camera' && (currentRecord.empty_count || 0) > 0">
+            <el-tag type="warning" size="small">
+              {{ ((currentRecord.empty_rate || 0) * 100).toFixed(1) }}%
+            </el-tag>
           </el-descriptions-item>
         </el-descriptions>
         
-        <div class="images-container">
+        <!-- 图片显示：只对图片类型显示 -->
+        <div v-if="currentRecord.file_type !== 'video' && currentRecord.file_type !== 'camera'" class="images-container">
           <div class="result-image">
             <h4>原始图片</h4>
             <el-image
@@ -99,6 +146,23 @@
             />
           </div>
         </div>
+        
+        <!-- 视频/摄像头提示：只对视频和摄像头类型显示 -->
+        <el-alert
+          v-if="currentRecord.file_type === 'video' || currentRecord.file_type === 'camera'"
+          :title="currentRecord.file_type === 'video' ? '视频检测统计' : '摄像头检测统计'"
+          type="success"
+          :closable="false"
+          style="margin-top: 20px;"
+        >
+          <template #default>
+            <div>
+              <strong>空货架最大值：{{ currentRecord.max_empty_count || 0 }}</strong><br/>
+              {{ currentRecord.file_type === 'video' ? '视频' : '摄像头' }}检测已完成，检测结果已保存到本地。<br/>
+              文件路径：{{ currentRecord.saved_image_path }}
+            </div>
+          </template>
+        </el-alert>
       </div>
     </el-dialog>
   </div>
@@ -113,9 +177,13 @@ interface HistoryRecord {
   id: number
   image_path: string
   saved_image_path: string
+  file_type: string
   created_at: string
-  detection_count: number
-  stats: { [key: string]: number }
+  total_detections: number
+  product_count: number
+  empty_count: number
+  empty_rate: number
+  stats?: { [key: string]: number }
   confidence?: number
   iou?: number
 }
@@ -133,7 +201,7 @@ const fetchHistory = async () => {
   try {
     const userId = localStorage.getItem('userId')
     const isAdmin = localStorage.getItem('isAdmin') === 'true'
-    const response = await axios.get('http://localhost:8000/detections/', {
+    const response = await axios.get('http://localhost:8000/api/detections/', {
       params: {
         limit: pageSize.value,
         skip: (currentPage.value - 1) * pageSize.value,
@@ -165,9 +233,23 @@ const formatDate = (dateStr: string) => {
   return date.toLocaleString('zh-CN')
 }
 
-const viewDetail = (record: HistoryRecord) => {
-  currentRecord.value = record
-  detailVisible.value = true
+const viewDetail = async (record: HistoryRecord) => {
+  try {
+    // 从后端获取完整的详情数据
+    const userId = localStorage.getItem('userId')
+    const isAdmin = localStorage.getItem('isAdmin') === 'true'
+    const response = await axios.get(`http://localhost:8000/api/detections/${record.id}`, {
+      params: {
+        user_id: userId ? parseInt(userId) : undefined,
+        is_admin: isAdmin
+      }
+    })
+    currentRecord.value = response.data
+    detailVisible.value = true
+  } catch (error) {
+    console.error('Error fetching detail:', error)
+    ElMessage.error('获取详情失败')
+  }
 }
 
 const deleteRecord = async (id: number) => {
@@ -180,7 +262,7 @@ const deleteRecord = async (id: number) => {
     
     const userId = localStorage.getItem('userId')
     const isAdmin = localStorage.getItem('isAdmin') === 'true'
-    await axios.delete(`http://localhost:8000/detections/${id}`, {
+    await axios.delete(`http://localhost:8000/api/detections/${id}`, {
       params: { 
         user_id: userId ? parseInt(userId) : undefined,
         is_admin: isAdmin
@@ -206,7 +288,7 @@ const clearHistory = async () => {
     
     // 批量删除
     for (const record of historyList.value) {
-      await axios.delete(`http://localhost:8000/detections/${record.id}`)
+      await axios.delete(`http://localhost:8000/api/detections/${record.id}`)
     }
     
     ElMessage.success('清空成功')
@@ -236,7 +318,7 @@ const getImageUrl = (recordId: number, type: 'original' | 'result') => {
   if (userId) params.append('user_id', userId)
   if (isAdmin) params.append('is_admin', 'true')
   const queryString = params.toString()
-  return `http://localhost:8000/detections/${recordId}/${type}${queryString ? '?' + queryString : ''}`
+  return `http://localhost:8000/api/detections/${recordId}/${type}${queryString ? '?' + queryString : ''}`
 }
 
 onMounted(() => {

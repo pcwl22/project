@@ -1,0 +1,15 @@
+{
+  "enable_empty_detection": true,
+  "gap_threshold": 0.3,
+  "row_threshold": 0.5,
+  "min_gap_pixels": 30,
+  "edge_detection": false,
+  "min_products_per_row": 2,
+  "video_skip_frames": 4,
+  "video_process_width": 640,
+  "video_direct_draw": true,
+  "video_use_gpu": true,
+  "video_enable_ffmpeg": false,
+  "default_conf_threshold": 0.15,
+  "default_iou_threshold": 0.35
+}

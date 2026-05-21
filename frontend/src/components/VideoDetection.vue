@@ -126,7 +126,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
@@ -134,13 +134,29 @@ import { QuestionFilled, VideoCamera, CaretRight, Download } from '@element-plus
 
 const props = defineProps<{
   modelList: string[]
+  selectedModel?: string  // 添加选中的模型
 }>()
 
 const emit = defineEmits<{
   (e: 'detection-complete'): void
+  (e: 'update:selectedModel', model: string): void  // 添加模型更新事件
 }>()
 
-const selectedModel = ref('best.pt')
+// 使用本地 ref 并通过 watch 同步
+const selectedModel = ref(props.selectedModel || 'best.pt')
+
+// 监听 props 变化，更新本地值
+watch(() => props.selectedModel, (newVal) => {
+  if (newVal && newVal !== selectedModel.value) {
+    selectedModel.value = newVal
+  }
+})
+
+// 监听本地值变化，emit 给父组件
+watch(selectedModel, (newVal) => {
+  emit('update:selectedModel', newVal)
+})
+
 const confidence = ref(0.25)
 const iouThreshold = ref(0.45)
 
@@ -182,9 +198,12 @@ const uploadVideo = async () => {
   const formData = new FormData()
   formData.append('file', videoFile.value)
 
+  // 获取当前登录用户的 ID
+  const userId = localStorage.getItem('userId') || '0'
+
   try {
     const response = await axios.post(
-      `/api/detect?mode=video&conf=${confidence.value}&iou=${iouThreshold.value}&model=${selectedModel.value}`,
+      `/api/detect?mode=video&conf=${confidence.value}&iou=${iouThreshold.value}&model=${selectedModel.value}&user_id=${userId}`,
       formData,
       {
         responseType: 'blob',
@@ -234,6 +253,41 @@ const uploadVideo = async () => {
     videoLoading.value = false
   }
 }
+
+// 加载保存的阈值
+const loadThresholds = async () => {
+  try {
+    const response = await axios.get('/api/config/thresholds')
+    if (response.data) {
+      confidence.value = response.data.conf_threshold
+      iouThreshold.value = response.data.iou_threshold
+    }
+  } catch (error) {
+    console.error('加载阈值失败:', error)
+  }
+}
+
+// 保存阈值
+const saveThresholds = async () => {
+  try {
+    await axios.put('/api/config/thresholds', {
+      conf_threshold: confidence.value,
+      iou_threshold: iouThreshold.value
+    })
+  } catch (error) {
+    console.error('保存阈值失败:', error)
+  }
+}
+
+// 监听阈值变化并保存
+watch([confidence, iouThreshold], () => {
+  saveThresholds()
+})
+
+// 组件挂载时加载阈值
+onMounted(() => {
+  loadThresholds()
+})
 </script>
 
 <style scoped>

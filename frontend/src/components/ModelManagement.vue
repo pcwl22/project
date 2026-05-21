@@ -1,11 +1,13 @@
 <template>
   <div class="model-management">
-    <div class="model-card glass-card">
+    <!-- 只有管理员才显示上传模块 -->
+    <div v-if="props.isAdmin" class="model-card glass-card">
       <div class="card-header">
         <div class="header-icon">
           <el-icon><UploadFilled /></el-icon>
         </div>
         <span>上传模型权重</span>
+        <el-tag type="danger" size="small" style="margin-left: 10px;">仅管理员</el-tag>
       </div>
       <div class="model-upload-section">
         <el-upload
@@ -83,6 +85,7 @@ import { UploadFilled, Upload, Cpu } from '@element-plus/icons-vue'
 const props = defineProps<{
   currentModel: string
   modelList: string[]
+  isAdmin?: boolean  // 添加管理员标识
 }>()
 
 const emit = defineEmits<{
@@ -109,30 +112,61 @@ const handleModelChange = (file: UploadFile) => {
 const uploadModel = async () => {
   if (!modelFile.value) return
 
+  // 检查是否为管理员
+  const isAdmin = localStorage.getItem('isAdmin') === 'true'
+  if (!isAdmin) {
+    ElMessage.error('只有管理员才能上传模型！')
+    return
+  }
+
   modelUploading.value = true
   const formData = new FormData()
   formData.append('file', modelFile.value)  // 修复：后端接收的参数名是 'file'
 
   try {
-    await axios.post('http://localhost:8000/upload_model', formData, {
+    await axios.post('http://localhost:8000/api/upload_model', formData, {
+      params: {
+        is_admin: true  // 添加管理员权限参数
+      },
       headers: {
         'Content-Type': 'multipart/form-data'
       }
     })
     
     ElMessage.success('模型上传成功！')
-    emit('update:currentModel', modelFile.value.name)
     
-    // 将新上传的模型添加到模型列表
-    if (!props.modelList.includes(modelFile.value.name)) {
-      const newList = [modelFile.value.name, ...props.modelList]
-      emit('update:modelList', newList)
+    // 立即从服务器刷新模型列表
+    try {
+      const response = await axios.get('http://localhost:8000/api/models')
+      if (response.data.models && response.data.models.length > 0) {
+        emit('update:modelList', response.data.models)
+        localStorage.setItem('modelList', JSON.stringify(response.data.models))
+        console.log('✅ 模型列表已刷新:', response.data.models)
+        
+        // 自动切换到新上传的模型
+        emit('update:currentModel', modelFile.value.name)
+      }
+    } catch (refreshError) {
+      console.error('刷新模型列表失败:', refreshError)
+      // 降级方案：手动添加到列表
+      if (!props.modelList.includes(modelFile.value.name)) {
+        const newList = [modelFile.value.name, ...props.modelList]
+        emit('update:modelList', newList)
+        localStorage.setItem('modelList', JSON.stringify(newList))
+      }
+      emit('update:currentModel', modelFile.value.name)
     }
     
     modelFile.value = null
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error uploading model:', error)
-    ElMessage.error('模型上传失败，请检查后端服务是否正常运行')
+    
+    // 处理权限错误
+    if (error.response?.status === 403) {
+      ElMessage.error('权限不足：只有管理员才能上传模型')
+    } else {
+      ElMessage.error('模型上传失败，请检查后端服务是否正常运行')
+    }
   } finally {
     modelUploading.value = false
   }
